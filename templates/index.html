@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DeepShield Advanced — AI Deepfake Detector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:        #04050a;
+      --surface:   #0c0e18;
+      --border:    rgba(255,255,255,0.07);
+      --accent:    #00f5c4;
+      --danger:    #ff3d6b;
+      --warn:      #ffb830;
+      --text:      #e8eaf2;
+      --muted:     #5a6070;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* BACKGROUND */
+    .grid-bg {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0,245,196,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,245,196,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      animation: gridShift 20s linear infinite;
+    }
+    @keyframes gridShift { 0%{background-position:0 0} 100%{background-position:40px 40px} }
+    .spotlight {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,245,196,0.07) 0%, transparent 70%);
+    }
+
+    /* LAYOUT */
+    .wrapper { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 0 24px 80px; }
+
+    /* HEADER */
+    header { padding: 48px 0 36px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--accent); border: 1px solid rgba(0,245,196,0.3);
+      background: rgba(0,245,196,0.06); padding: 5px 14px; border-radius: 100px;
+    }
+    .badge::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent); box-shadow: 0 0 8px var(--accent);
+      animation: blink 2s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    h1 { font-family: 'Syne', sans-serif; font-size: clamp(42px, 8vw, 72px); font-weight: 800; letter-spacing: -2px; line-height: 1; }
+    h1 span { background: linear-gradient(135deg, var(--accent) 0%, #00c9ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .subtitle { font-size: 14px; color: var(--muted); max-width: 480px; line-height: 1.7; }
+
+    /* STATS */
+    .stats { display: flex; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 28px; }
+    .stat { flex: 1; padding: 14px 16px; background: var(--surface); text-align: center; }
+    .stat-val { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent); }
+    .stat-label { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+
+    /* TABS */
+    .tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab-btn {
+      flex: 1; min-width: 100px; padding: 10px 16px; border: none; background: transparent;
+      color: var(--muted); font-family: 'DM Mono', monospace; font-size: 11px;
+      letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+      border-radius: 10px; transition: all 0.2s; white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+    .tab-btn.active { background: rgba(0,245,196,0.12); color: var(--accent); border: 1px solid rgba(0,245,196,0.25); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* CARD */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; }
+    .card-header { padding: 18px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot-r { background: #ff5f57; } .dot-y { background: #febc2e; } .dot-g { background: var(--accent); }
+    .card-title { font-size: 12px; color: var(--muted); margin-left: 8px; letter-spacing: 1px; }
+    .card-body { padding: 28px; }
+
+    /* DROP ZONE */
+    .drop-zone {
+      border: 2px dashed rgba(0,245,196,0.2); border-radius: 16px; padding: 52px 24px;
+      text-align: center; cursor: pointer; transition: all 0.3s; position: relative; overflow: hidden;
+      background: rgba(0,245,196,0.01);
+    }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(0,245,196,0.04); }
+    .drop-zone.drag-over { box-shadow: 0 0 40px rgba(0,245,196,0.1) inset; }
+    .drop-icon { font-size: 48px; margin-bottom: 14px; display: block; transition: transform 0.3s; }
+    .drop-zone:hover .drop-icon { transform: translateY(-4px) scale(1.1); }
+    .drop-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .drop-sub { font-size: 12px; color: var(--muted); line-height: 1.7; }
+    .drop-sub span { color: var(--accent); }
+    input[type=file] { display: none; }
+    .browse-btn {
+      display: inline-block; margin-top: 18px; padding: 10px 28px; background: transparent;
+      border: 1px solid rgba(0,245,196,0.4); color: var(--accent); border-radius: 100px;
+      font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;
+      cursor: pointer; transition: all 0.25s;
+    }
+    .browse-btn:hover { background: rgba(0,245,196,0.1); border-color: var(--accent); box-shadow: 0 0 20px rgba(0,245,196,0.2); }
+
+    /* PREVIEW */
+    .preview-section { display: none; margin-top: 24px; }
+    .preview-grid { display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: start; }
+    @media(max-width:600px){ .preview-grid { grid-template-columns: 1fr; } }
+    .preview-img-wrap { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); position: relative; }
+    .preview-img-wrap img { width: 100%; display: block; aspect-ratio: 1; object-fit: cover; }
+    .preview-label { position: absolute; bottom: 0; left: 0; right: 0; padding: 6px 10px; background: rgba(4,5,10,0.8); font-size: 10px; color: var(--muted); text-align: center; letter-spacing: 1px; }
+    .preview-info { display: flex; flex-direction: column; gap: 10px; }
+    .info-row { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; }
+    .info-key { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; min-width: 72px; }
+    .info-val { font-size: 12px; color: var(--text); }
+
+    /* PRIMARY BUTTON */
+    .primary-btn {
+      width: 100%; margin-top: 20px; padding: 15px 32px;
+      background: linear-gradient(135deg, var(--accent) 0%, #00c9ff 100%);
+      color: #04050a; border: none; border-radius: 12px;
+      font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.5px;
+      cursor: pointer; transition: all 0.25s; display: none; position: relative; overflow: hidden;
+    }
+    .primary-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 40px rgba(0,245,196,0.3); }
+    .primary-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .primary-btn.show { display: block; }
+
+    /* LOADING */
+    .loading-section { display: none; text-align: center; padding: 36px 0; }
+    .scanner { width: 72px; height: 72px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; margin: 0 auto 18px; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 13px; color: var(--muted); }
+    .loading-text span { display: inline-block; animation: dotFade 1.5s ease-in-out infinite; }
+    .loading-text span:nth-child(2){animation-delay:0.2s} .loading-text span:nth-child(3){animation-delay:0.4s}
+    @keyframes dotFade { 0%,100%{opacity:0.3} 50%{opacity:1} }
+
+    /* RESULT */
+    .result-section { display: none; margin-top: 28px; }
+    .result-card { border-radius: 16px; padding: 28px; text-align: center; position: relative; overflow: hidden; animation: resultIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+    @keyframes resultIn { from{opacity:0;transform:scale(0.9) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
+    .result-card.real { background: linear-gradient(135deg,rgba(0,245,196,0.08),rgba(0,201,255,0.06)); border: 1px solid rgba(0,245,196,0.3); box-shadow: 0 0 60px rgba(0,245,196,0.08); }
+    .result-card.fake { background: linear-gradient(135deg,rgba(255,61,107,0.08),rgba(255,100,60,0.06)); border: 1px solid rgba(255,61,107,0.3); box-shadow: 0 0 60px rgba(255,61,107,0.08); }
+    .result-icon { font-size: 52px; margin-bottom: 10px; display: block; }
+    .result-verdict { font-family: 'Syne', sans-serif; font-size: clamp(26px,5vw,40px); font-weight: 800; letter-spacing: -1px; margin-bottom: 6px; }
+    .result-card.real .result-verdict { color: var(--accent); }
+    .result-card.fake .result-verdict { color: var(--danger); }
+    .result-conf { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+    .result-conf strong { color: var(--text); }
+    .score-bars { display: flex; flex-direction: column; gap: 10px; text-align: left; background: rgba(4,5,10,0.4); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+    .score-row { display: flex; align-items: center; gap: 12px; }
+    .score-label { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; min-width: 52px; }
+    .score-bar-wrap { flex: 1; height: 7px; background: rgba(255,255,255,0.05); border-radius: 100px; overflow: hidden; }
+    .score-bar-fill { height: 100%; border-radius: 100px; transition: width 1.2s cubic-bezier(0.25,1,0.5,1); width: 0; }
+    .real-bar { background: linear-gradient(90deg, var(--accent), #00c9ff); }
+    .fake-bar { background: linear-gradient(90deg, var(--danger), #ff8c42); }
+    .score-pct { font-size: 12px; font-weight: 600; min-width: 44px; text-align: right; }
+    .real-row .score-pct { color: var(--accent); } .fake-row .score-pct { color: var(--danger); }
+
+    .result-actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; justify-content: center; }
+    .retry-btn { padding: 9px 22px; background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 100px; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; transition: all 0.25s; }
+    .retry-btn:hover { border-color: var(--text); color: var(--text); }
+    .heatmap-btn { padding: 9px 22px; background: rgba(0,245,196,0.08); border: 1px solid rgba(0,245,196,0.3); color: var(--accent); border-radius: 100px; font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; transition: all 0.25s; }
+    .heatmap-btn:hover { background: rgba(0,245,196,0.15); }
+
+    /* HEATMAP DISPLAY */
+    .heatmap-result { margin-top: 20px; display: none; }
+    .heatmap-result img { width: 100%; border-radius: 12px; border: 1px solid var(--border); max-width: 400px; display: block; margin: 0 auto; }
+    .heatmap-label { text-align: center; font-size: 11px; color: var(--muted); margin-top: 8px; letter-spacing: 1px; }
+
+    /* BATCH */
+    .batch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 20px; }
+    .batch-item { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 14px; transition: border-color 0.2s; }
+    .batch-item.result-real { border-color: rgba(0,245,196,0.3); }
+    .batch-item.result-fake { border-color: rgba(255,61,107,0.3); }
+    .batch-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; margin-bottom: 10px; }
+    .batch-filename { font-size: 10px; color: var(--muted); margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .batch-verdict { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; }
+    .batch-verdict.real { color: var(--accent); } .batch-verdict.fake { color: var(--danger); }
+    .batch-conf { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .batch-summary { display: flex; gap: 12px; margin-top: 16px; }
+    .summary-box { flex: 1; padding: 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 10px; text-align: center; }
+    .summary-num { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 700; }
+    .summary-num.real { color: var(--accent); } .summary-num.fake { color: var(--danger); }
+    .summary-label { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-top: 4px; }
+    .report-btn { width: 100%; margin-top: 16px; padding: 13px; background: rgba(255,184,48,0.1); border: 1px solid rgba(255,184,48,0.3); color: var(--warn); border-radius: 10px; font-family: 'DM Mono', monospace; font-size: 13px; cursor: pointer; transition: all 0.25s; letter-spacing: 1px; }
+    .report-btn:hover { background: rgba(255,184,48,0.18); }
+
+    /* WEBCAM */
+    .webcam-container { position: relative; border-radius: 16px; overflow: hidden; background: #000; border: 1px solid var(--border); aspect-ratio: 4/3; }
+    .webcam-container video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .webcam-overlay { position: absolute; inset: 0; pointer-events: none; border: 2px solid rgba(0,245,196,0.3); border-radius: 16px; }
+    .webcam-corner { position: absolute; width: 20px; height: 20px; }
+    .webcam-corner.tl { top: 12px; left: 12px; border-top: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+    .webcam-corner.tr { top: 12px; right: 12px; border-top: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+    .webcam-corner.bl { bottom: 12px; left: 12px; border-bottom: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+    .webcam-corner.br { bottom: 12px; right: 12px; border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+    .webcam-scan { position: absolute; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: scan 2.5s ease-in-out infinite; opacity: 0; }
+    .webcam-scan.active { opacity: 1; }
+    @keyframes scan { 0%{top:10%;opacity:0} 10%{opacity:1} 90%{opacity:1} 100%{top:90%;opacity:0} }
+    .webcam-controls { display: flex; gap: 10px; margin-top: 14px; }
+    .webcam-btn { flex: 1; padding: 12px; border: none; border-radius: 10px; font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; transition: all 0.25s; }
+    .webcam-start { background: rgba(0,245,196,0.12); border: 1px solid rgba(0,245,196,0.3); color: var(--accent); }
+    .webcam-start:hover { background: rgba(0,245,196,0.2); }
+    .webcam-capture { background: linear-gradient(135deg, var(--accent), #00c9ff); color: #04050a; font-weight: 700; }
+    .webcam-capture:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,245,196,0.3); }
+    .webcam-capture:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .webcam-result-row { display: flex; gap: 16px; margin-top: 16px; align-items: flex-start; }
+    .webcam-snap { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); width: 140px; flex-shrink: 0; }
+    .webcam-snap img { width: 100%; display: block; }
+    .webcam-verdict-box { flex: 1; }
+
+    /* HEATMAP TAB */
+    .heatmap-tab-result { display: none; margin-top: 20px; }
+    .heatmap-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media(max-width:500px){ .heatmap-compare { grid-template-columns: 1fr; } }
+    .heatmap-compare img { width: 100%; border-radius: 12px; border: 1px solid var(--border); }
+    .heatmap-compare .img-label { text-align: center; font-size: 11px; color: var(--muted); margin-top: 6px; letter-spacing: 1px; }
+
+    /* NOTIFICATION */
+    .notif { position: fixed; top: 20px; right: 20px; z-index: 999; padding: 12px 20px; border-radius: 10px; font-size: 12px; letter-spacing: 0.5px; animation: slideIn 0.3s ease; max-width: 300px; }
+    .notif.success { background: rgba(0,245,196,0.15); border: 1px solid rgba(0,245,196,0.4); color: var(--accent); }
+    .notif.error { background: rgba(255,61,107,0.15); border: 1px solid rgba(255,61,107,0.4); color: var(--danger); }
+    @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+
+    /* HOW IT WORKS */
+    .how-section { margin-top: 48px; }
+    .section-label { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 18px; display: flex; align-items: center; gap: 12px; }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+    .step { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; transition: all 0.2s; }
+    .step:hover { border-color: rgba(0,245,196,0.2); transform: translateY(-2px); }
+    .step-num { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; color: rgba(0,245,196,0.15); margin-bottom: 8px; }
+    .step-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .step-desc { font-size: 11px; color: var(--muted); line-height: 1.6; }
+    .tech-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .tech-badge { padding: 4px 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 100px; font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+
+    /* FOOTER */
+    footer { margin-top: 60px; padding: 24px 0; border-top: 1px solid var(--border); text-align: center; font-size: 11px; color: var(--muted); line-height: 2; }
+    footer span { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="spotlight"></div>
+
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="badge">AI Powered · Real-Time Detection</div>
+    <h1>Deep<span>Shield</span></h1>
+    <p class="subtitle">Advanced deepfake detection using EfficientNet-B0 · Single, Batch, Webcam, Heatmap, and PDF Reports</p>
+  </header>
+
+  <!-- STATS -->
+  <div class="stats">
+    <div class="stat"><div class="stat-val">EfficientNet</div><div class="stat-label">Architecture</div></div>
+    <div class="stat"><div class="stat-val">B0</div><div class="stat-label">Model Version</div></div>
+    <div class="stat"><div class="stat-val">GradCAM</div><div class="stat-label">Explainability</div></div>
+    <div class="stat"><div class="stat-val">~0.5s</div><div class="stat-label">Inference Time</div></div>
+    <div class="stat"><div class="stat-val">5</div><div class="stat-label">Features</div></div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('single', this)">🔍 Single Image</button>
+    <button class="tab-btn" onclick="switchTab('batch', this)">📦 Batch Detect</button>
+    <button class="tab-btn" onclick="switchTab('webcam', this)">📷 Webcam</button>
+    <button class="tab-btn" onclick="switchTab('heatmap', this)">🔥 Heatmap</button>
+  </div>
+
+  <!-- ════════════════════════════════
+       TAB 1: SINGLE IMAGE
+  ════════════════════════════════ -->
+  <div class="tab-panel active" id="tab-single">
+    <div class="card">
+      <div class="card-header">
+        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+        <span class="card-title">// SINGLE IMAGE ANALYSIS</span>
+      </div>
+      <div class="card-body">
+        <div class="drop-zone" id="singleDrop">
+          <span class="drop-icon">🔍</span>
+          <div class="drop-title">Drop your image here</div>
+          <div class="drop-sub">Supports <span>JPG, PNG, WEBP, BMP</span> · Max <span>50MB</span><br>Works best with <span>face images</span></div>
+          <button class="browse-btn" onclick="document.getElementById('singleFile').click()">Browse Files</button>
+          <input type="file" id="singleFile" accept="image/*" />
+        </div>
+
+        <div class="preview-section" id="singlePreview">
+          <div class="preview-grid">
+            <div class="preview-img-wrap">
+              <img id="singlePreviewImg" src="" alt="Preview" />
+              <div class="preview-label">UPLOADED IMAGE</div>
+            </div>
+            <div class="preview-info">
+              <div class="info-row"><span class="info-key">File</span><span class="info-val" id="singleInfoName">—</span></div>
+              <div class="info-row"><span class="info-key">Size</span><span class="info-val" id="singleInfoSize">—</span></div>
+              <div class="info-row"><span class="info-key">Type</span><span class="info-val" id="singleInfoType">—</span></div>
+              <div class="info-row"><span class="info-key">Status</span><span class="info-val" style="color:var(--accent)">Ready to Analyze</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="loading-section" id="singleLoading">
+          <div class="scanner"></div>
+          <div class="loading-text">Analyzing image<span>.</span><span>.</span><span>.</span></div>
+          <p style="font-size:11px;color:var(--muted);margin-top:8px;">Running neural network inference</p>
+        </div>
+
+        <button class="primary-btn" id="singleBtn" onclick="detectSingle()">⚡ Analyze Image</button>
+
+        <div class="result-section" id="singleResult">
+          <div class="result-card" id="singleResultCard">
+            <span class="result-icon" id="singleIcon">—</span>
+            <div class="result-verdict" id="singleVerdict">—</div>
+            <div class="result-conf">Confidence: <strong id="singleConf">—</strong></div>
+            <div class="score-bars">
+              <div class="score-row real-row">
+                <span class="score-label">Real</span>
+                <div class="score-bar-wrap"><div class="score-bar-fill real-bar" id="singleRealBar"></div></div>
+                <span class="score-pct" id="singleRealPct">0%</span>
+              </div>
+              <div class="score-row fake-row">
+                <span class="score-label">Fake</span>
+                <div class="score-bar-wrap"><div class="score-bar-fill fake-bar" id="singleFakeBar"></div></div>
+                <span class="score-pct" id="singleFakePct">0%</span>
+              </div>
+            </div>
+            <div class="result-actions">
+              <button class="retry-btn" onclick="resetSingle()">↩ Analyze Another</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════
+       TAB 2: BATCH
+  ════════════════════════════════ -->
+  <div class="tab-panel" id="tab-batch">
+    <div class="card">
+      <div class="card-header">
+        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+        <span class="card-title">// BATCH IMAGE ANALYSIS</span>
+      </div>
+      <div class="card-body">
+        <div class="drop-zone" id="batchDrop">
+          <span class="drop-icon">📦</span>
+          <div class="drop-title">Drop multiple images</div>
+          <div class="drop-sub">Select <span>up to 20 images</span> at once<br>All will be analyzed together</div>
+          <button class="browse-btn" onclick="document.getElementById('batchFile').click()">Select Images</button>
+          <input type="file" id="batchFile" accept="image/*" multiple />
+        </div>
+
+        <div id="batchSelectedInfo" style="display:none; margin-top:14px; padding:12px 16px; background:rgba(0,245,196,0.05); border:1px solid rgba(0,245,196,0.2); border-radius:10px; font-size:12px; color:var(--accent);">
+          <span id="batchCount">0</span> images selected — ready to analyze
+        </div>
+
+        <div class="loading-section" id="batchLoading">
+          <div class="scanner"></div>
+          <div class="loading-text">Processing batch<span>.</span><span>.</span><span>.</span></div>
+          <p style="font-size:11px;color:var(--muted);margin-top:8px;">Analyzing all images...</p>
+        </div>
+
+        <button class="primary-btn" id="batchBtn" onclick="detectBatch()">⚡ Analyze All Images</button>
+
+        <div id="batchResults" style="display:none;">
+          <div class="batch-summary" id="batchSummary"></div>
+          <div class="batch-grid" id="batchGrid"></div>
+          <button class="report-btn" id="batchReportBtn" onclick="generateReport()">📄 Download PDF Report</button>
+          <button class="retry-btn" style="margin-top:10px;width:100%;text-align:center;" onclick="resetBatch()">↩ New Batch</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════
+       TAB 3: WEBCAM
+  ════════════════════════════════ -->
+  <div class="tab-panel" id="tab-webcam">
+    <div class="card">
+      <div class="card-header">
+        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+        <span class="card-title">// LIVE WEBCAM DETECTION</span>
+      </div>
+      <div class="card-body">
+        <div class="webcam-container" id="webcamContainer">
+          <video id="webcamVideo" autoplay playsinline muted></video>
+          <canvas id="webcamCanvas" style="display:none;"></canvas>
+          <div class="webcam-overlay">
+            <div class="webcam-corner tl"></div>
+            <div class="webcam-corner tr"></div>
+            <div class="webcam-corner bl"></div>
+            <div class="webcam-corner br"></div>
+            <div class="webcam-scan" id="webcamScan"></div>
+          </div>
+          <div id="webcamPlaceholder" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;">
+            <span style="font-size:48px;">📷</span>
+            <span style="font-size:12px;color:var(--muted);letter-spacing:1px;">CAMERA INACTIVE</span>
+          </div>
+        </div>
+
+        <div class="webcam-controls">
+          <button class="webcam-btn webcam-start" id="webcamStartBtn" onclick="startWebcam()">▶ Start Camera</button>
+          <button class="webcam-btn webcam-capture" id="webcamCaptureBtn" onclick="captureWebcam()" disabled>📸 Capture & Analyze</button>
+        </div>
+
+        <div class="loading-section" id="webcamLoading">
+          <div class="scanner"></div>
+          <div class="loading-text">Analyzing frame<span>.</span><span>.</span><span>.</span></div>
+        </div>
+
+        <div id="webcamResultArea" style="display:none; margin-top:16px;">
+          <div class="webcam-result-row">
+            <div class="webcam-snap"><img id="webcamSnapImg" src="" alt="Capture" /></div>
+            <div class="webcam-verdict-box">
+              <div class="result-card" id="webcamResultCard" style="text-align:left;padding:18px;">
+                <span class="result-icon" id="webcamIcon" style="font-size:32px;"></span>
+                <div class="result-verdict" id="webcamVerdict" style="font-size:22px;"></div>
+                <div class="result-conf" style="margin-bottom:12px;">Confidence: <strong id="webcamConf"></strong></div>
+                <div class="score-bars" style="padding:14px;">
+                  <div class="score-row real-row">
+                    <span class="score-label">Real</span>
+                    <div class="score-bar-wrap"><div class="score-bar-fill real-bar" id="webcamRealBar"></div></div>
+                    <span class="score-pct" id="webcamRealPct">0%</span>
+                  </div>
+                  <div class="score-row fake-row">
+                    <span class="score-label">Fake</span>
+                    <div class="score-bar-wrap"><div class="score-bar-fill fake-bar" id="webcamFakeBar"></div></div>
+                    <span class="score-pct" id="webcamFakePct">0%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════
+       TAB 4: HEATMAP
+  ════════════════════════════════ -->
+  <div class="tab-panel" id="tab-heatmap">
+    <div class="card">
+      <div class="card-header">
+        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+        <span class="card-title">// GRADCAM HEATMAP VISUALIZATION</span>
+      </div>
+      <div class="card-body">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7;">
+          GradCAM highlights <span style="color:var(--accent)">which regions</span> of the image the AI focused on to make its decision. Red/warm areas = high attention zones.
+        </p>
+        <div class="drop-zone" id="heatmapDrop">
+          <span class="drop-icon">🔥</span>
+          <div class="drop-title">Drop image for heatmap analysis</div>
+          <div class="drop-sub">The AI will show you <span>exactly where it looks</span><br>to determine if the image is fake</div>
+          <button class="browse-btn" onclick="document.getElementById('heatmapFile').click()">Select Image</button>
+          <input type="file" id="heatmapFile" accept="image/*" />
+        </div>
+
+        <div class="preview-section" id="heatmapPreview">
+          <div class="preview-grid">
+            <div class="preview-img-wrap">
+              <img id="heatmapPreviewImg" src="" alt="Preview" />
+              <div class="preview-label">ORIGINAL IMAGE</div>
+            </div>
+            <div class="preview-info">
+              <div class="info-row"><span class="info-key">File</span><span class="info-val" id="heatmapInfoName">—</span></div>
+              <div class="info-row"><span class="info-key">Size</span><span class="info-val" id="heatmapInfoSize">—</span></div>
+              <div class="info-row"><span class="info-key">Method</span><span class="info-val" style="color:var(--accent)">GradCAM</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="loading-section" id="heatmapLoading">
+          <div class="scanner"></div>
+          <div class="loading-text">Generating heatmap<span>.</span><span>.</span><span>.</span></div>
+          <p style="font-size:11px;color:var(--muted);margin-top:8px;">Running GradCAM visualization...</p>
+        </div>
+
+        <button class="primary-btn" id="heatmapBtn" onclick="generateHeatmap()">🔥 Generate Heatmap</button>
+
+        <div class="heatmap-tab-result" id="heatmapTabResult">
+          <div style="margin-bottom:14px; padding:14px 18px; border-radius:10px;" id="heatmapResultBox"></div>
+          <div class="heatmap-compare">
+            <div>
+              <img id="heatmapOrigImg" src="" alt="Original" />
+              <div class="img-label">ORIGINAL IMAGE</div>
+            </div>
+            <div>
+              <img id="heatmapOverlayImg" src="" alt="Heatmap" />
+              <div class="img-label">GRADCAM HEATMAP OVERLAY</div>
+            </div>
+          </div>
+          <button class="retry-btn" style="margin-top:16px;" onclick="resetHeatmap()">↩ Try Another Image</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <div class="how-section">
+    <div class="section-label">How It Works</div>
+    <div class="steps-grid">
+      <div class="step"><div class="step-num">01</div><div class="step-title">Upload</div><div class="step-desc">Upload a face image. Flask server receives and saves it securely.</div></div>
+      <div class="step"><div class="step-num">02</div><div class="step-title">Preprocess</div><div class="step-desc">Image resized to 224×224 and normalized for EfficientNet input.</div></div>
+      <div class="step"><div class="step-num">03</div><div class="step-title">Inference</div><div class="step-desc">EfficientNet-B0 classifies: Real vs Fake with confidence scores.</div></div>
+      <div class="step"><div class="step-num">04</div><div class="step-title">GradCAM</div><div class="step-desc">Gradient-weighted activation maps show exactly which pixels triggered the decision.</div></div>
+      <div class="step"><div class="step-num">05</div><div class="step-title">Report</div><div class="step-desc">Generate a professional PDF report with all batch results and scores.</div></div>
+    </div>
+  </div>
+
+  <!-- TECH STACK -->
+  <div style="margin-top:28px;">
+    <div class="section-label">Technology Stack</div>
+    <div class="tech-row">
+      <span class="tech-badge">Python 3.10+</span>
+      <span class="tech-badge">Flask 3.x</span>
+      <span class="tech-badge">PyTorch 2.x</span>
+      <span class="tech-badge">EfficientNet-B0</span>
+      <span class="tech-badge">GradCAM</span>
+      <span class="tech-badge">OpenCV</span>
+      <span class="tech-badge">ReportLab</span>
+      <span class="tech-badge">Pillow</span>
+      <span class="tech-badge">HTML5 / CSS3</span>
+      <span class="tech-badge">Vanilla JS</span>
+    </div>
+  </div>
+
+  <footer>
+    Built with <span>PyTorch + Flask</span> · EfficientNet-B0 + GradCAM<br>
+    DeepShield Advanced · Final Year Project
+  </footer>
+
+</div>
+
+<script>
+// ════════════════════════════════════
+// UTILITIES
+// ════════════════════════════════════
+function showNotif(msg, type='success') {
+  const n = document.createElement('div');
+  n.className = `notif ${type}`;
+  n.textContent = msg;
+  document.body.appendChild(n);
+  setTimeout(() => n.remove(), 3500);
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  // Stop webcam if switching away
+  if (name !== 'webcam') stopWebcam();
+}
+
+function showResult(card, icon, verdict, conf, real, fake, isReal) {
+  card.className = 'result-card ' + (isReal ? 'real' : 'fake');
+  icon.textContent = isReal ? '✅' : '⚠️';
+  verdict.textContent = isReal ? 'Real Image' : 'Deepfake Detected';
+  conf.textContent = (isReal ? real : fake) + '%';
+}
+
+function animateBars(realBar, fakeBar, realPct, fakePct, real, fake) {
+  setTimeout(() => {
+    realBar.style.width = real + '%';
+    fakeBar.style.width = fake + '%';
+    realPct.textContent = real + '%';
+    fakePct.textContent = fake + '%';
+  }, 100);
+}
+
+// ════════════════════════════════════
+// TAB 1: SINGLE IMAGE
+// ════════════════════════════════════
+let singleFile = null;
+
+const singleDrop = document.getElementById('singleDrop');
+singleDrop.addEventListener('dragover', e => { e.preventDefault(); singleDrop.classList.add('drag-over'); });
+singleDrop.addEventListener('dragleave', () => singleDrop.classList.remove('drag-over'));
+singleDrop.addEventListener('drop', e => { e.preventDefault(); singleDrop.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('image/')) setSingleFile(f); });
+singleDrop.addEventListener('click', e => { if (e.target.tagName !== 'BUTTON') document.getElementById('singleFile').click(); });
+document.getElementById('singleFile').addEventListener('change', e => { if (e.target.files[0]) setSingleFile(e.target.files[0]); });
+
+function setSingleFile(file) {
+  singleFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('singlePreviewImg').src = e.target.result;
+    document.getElementById('singlePreview').style.display = 'block';
+    document.getElementById('singleBtn').classList.add('show');
+    document.getElementById('singleResult').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+  document.getElementById('singleInfoName').textContent = file.name.length > 22 ? file.name.slice(0,22)+'…' : file.name;
+  document.getElementById('singleInfoSize').textContent = (file.size/1024).toFixed(1)+' KB';
+  document.getElementById('singleInfoType').textContent = file.type.toUpperCase().replace('IMAGE/','');
+}
+
+async function detectSingle() {
+  if (!singleFile) return;
+  const btn = document.getElementById('singleBtn');
+  btn.disabled = true;
+  document.getElementById('singleLoading').style.display = 'block';
+  document.getElementById('singleResult').style.display = 'none';
+
+  const fd = new FormData();
+  fd.append('image', singleFile);
+  try {
+    const res = await fetch('/detect', { method:'POST', body:fd });
+    const data = await res.json();
+    document.getElementById('singleLoading').style.display = 'none';
+    if (data.success) {
+      const r = data.result;
+      showResult(
+        document.getElementById('singleResultCard'),
+        document.getElementById('singleIcon'),
+        document.getElementById('singleVerdict'),
+        document.getElementById('singleConf'),
+        r.real_score, r.fake_score, !r.is_fake
+      );
+      animateBars(
+        document.getElementById('singleRealBar'),
+        document.getElementById('singleFakeBar'),
+        document.getElementById('singleRealPct'),
+        document.getElementById('singleFakePct'),
+        r.real_score, r.fake_score
+      );
+      document.getElementById('singleResult').style.display = 'block';
+    } else {
+      showNotif('Error: ' + (data.error || 'Unknown'), 'error');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    document.getElementById('singleLoading').style.display = 'none';
+    showNotif('Connection error — is Flask running?', 'error');
+    btn.disabled = false;
+  }
+}
+
+function resetSingle() {
+  singleFile = null;
+  document.getElementById('singlePreview').style.display = 'none';
+  document.getElementById('singleBtn').classList.remove('show');
+  document.getElementById('singleBtn').disabled = false;
+  document.getElementById('singleLoading').style.display = 'none';
+  document.getElementById('singleResult').style.display = 'none';
+  document.getElementById('singleFile').value = '';
+  document.getElementById('singleRealBar').style.width = '0%';
+  document.getElementById('singleFakeBar').style.width = '0%';
+}
+
+// ════════════════════════════════════
+// TAB 2: BATCH
+// ════════════════════════════════════
+let batchFiles = [];
+let batchResultsData = [];
+
+const batchDrop = document.getElementById('batchDrop');
+batchDrop.addEventListener('dragover', e => { e.preventDefault(); batchDrop.classList.add('drag-over'); });
+batchDrop.addEventListener('dragleave', () => batchDrop.classList.remove('drag-over'));
+batchDrop.addEventListener('drop', e => { e.preventDefault(); batchDrop.classList.remove('drag-over'); setBatchFiles(Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'))); });
+batchDrop.addEventListener('click', e => { if (e.target.tagName !== 'BUTTON') document.getElementById('batchFile').click(); });
+document.getElementById('batchFile').addEventListener('change', e => { setBatchFiles(Array.from(e.target.files)); });
+
+function setBatchFiles(files) {
+  batchFiles = files.slice(0, 20);
+  if (batchFiles.length > 0) {
+    document.getElementById('batchSelectedInfo').style.display = 'block';
+    document.getElementById('batchCount').textContent = batchFiles.length;
+    document.getElementById('batchBtn').classList.add('show');
+    document.getElementById('batchResults').style.display = 'none';
+  }
+}
+
+async function detectBatch() {
+  if (!batchFiles.length) return;
+  const btn = document.getElementById('batchBtn');
+  btn.disabled = true;
+  document.getElementById('batchLoading').style.display = 'block';
+  document.getElementById('batchResults').style.display = 'none';
+
+  const fd = new FormData();
+  batchFiles.forEach(f => fd.append('images', f));
+
+  try {
+    const res = await fetch('/detect/batch', { method:'POST', body:fd });
+    const data = await res.json();
+    document.getElementById('batchLoading').style.display = 'none';
+    if (data.success) {
+      batchResultsData = data.results;
+      renderBatchResults(data.results);
+    } else {
+      showNotif('Error: ' + (data.error || 'Unknown'), 'error');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    document.getElementById('batchLoading').style.display = 'none';
+    showNotif('Connection error — is Flask running?', 'error');
+    btn.disabled = false;
+  }
+}
+
+function renderBatchResults(results) {
+  const fakes = results.filter(r => r.result.is_fake).length;
+  const reals = results.length - fakes;
+
+  document.getElementById('batchSummary').innerHTML = `
+    <div class="summary-box"><div class="summary-num real">${reals}</div><div class="summary-label">Real Images</div></div>
+    <div class="summary-box"><div class="summary-num fake">${fakes}</div><div class="summary-label">Deepfakes</div></div>
+    <div class="summary-box"><div class="summary-num" style="color:var(--text)">${results.length}</div><div class="summary-label">Total Analyzed</div></div>
+  `;
+
+  const grid = document.getElementById('batchGrid');
+  grid.innerHTML = '';
+  results.forEach(item => {
+    const r = item.result;
+    const div = document.createElement('div');
+    div.className = 'batch-item ' + (r.is_fake ? 'result-fake' : 'result-real');
+    
+    // Find the file object for preview
+    const fileObj = batchFiles.find(f => f.name === item.filename);
+    const imgSrc = fileObj ? URL.createObjectURL(fileObj) : '';
+    
+    div.innerHTML = `
+      ${imgSrc ? `<img src="${imgSrc}" alt="${item.filename}" />` : ''}
+      <div class="batch-filename">${item.filename}</div>
+      <div class="batch-verdict ${r.is_fake ? 'fake' : 'real'}">${r.is_fake ? '⚠️ Deepfake' : '✅ Real'}</div>
+      <div class="batch-conf">${r.confidence}% confidence</div>
+    `;
+    grid.appendChild(div);
+  });
+
+  document.getElementById('batchResults').style.display = 'block';
+  showNotif(`Batch complete! ${reals} real, ${fakes} deepfakes found.`);
+}
+
+async function generateReport() {
+  const btn = document.getElementById('batchReportBtn');
+  btn.textContent = '⏳ Generating PDF...';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/report/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ results: batchResultsData })
+    });
+    const data = await res.json();
+    if (data.success) {
+      const a = document.createElement('a');
+      a.href = data.download_url;
+      a.download = '';
+      a.click();
+      showNotif('PDF report downloaded!');
+    } else {
+      showNotif('Report error: ' + data.error, 'error');
+    }
+  } catch(e) {
+    showNotif('Failed to generate report', 'error');
+  }
+  btn.textContent = '📄 Download PDF Report';
+  btn.disabled = false;
+}
+
+function resetBatch() {
+  batchFiles = [];
+  batchResultsData = [];
+  document.getElementById('batchSelectedInfo').style.display = 'none';
+  document.getElementById('batchBtn').classList.remove('show');
+  document.getElementById('batchBtn').disabled = false;
+  document.getElementById('batchLoading').style.display = 'none';
+  document.getElementById('batchResults').style.display = 'none';
+  document.getElementById('batchFile').value = '';
+}
+
+// ════════════════════════════════════
+// TAB 3: WEBCAM
+// ════════════════════════════════════
+let webcamStream = null;
+
+async function startWebcam() {
+  const btn = document.getElementById('webcamStartBtn');
+  try {
+    webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width:640, height:480 } });
+    const video = document.getElementById('webcamVideo');
+    video.srcObject = webcamStream;
+    document.getElementById('webcamPlaceholder').style.display = 'none';
+    document.getElementById('webcamCaptureBtn').disabled = false;
+    document.getElementById('webcamScan').classList.add('active');
+    btn.textContent = '⏹ Stop Camera';
+    btn.onclick = stopWebcam;
+    showNotif('Camera started!');
+  } catch(e) {
+    showNotif('Camera access denied or not available.', 'error');
+  }
+}
+
+function stopWebcam() {
+  if (webcamStream) {
+    webcamStream.getTracks().forEach(t => t.stop());
+    webcamStream = null;
+  }
+  const video = document.getElementById('webcamVideo');
+  video.srcObject = null;
+  document.getElementById('webcamPlaceholder').style.display = 'flex';
+  document.getElementById('webcamCaptureBtn').disabled = true;
+  document.getElementById('webcamScan').classList.remove('active');
+  const btn = document.getElementById('webcamStartBtn');
+  btn.textContent = '▶ Start Camera';
+  btn.onclick = startWebcam;
+}
+
+async function captureWebcam() {
+  const video = document.getElementById('webcamVideo');
+  const canvas = document.getElementById('webcamCanvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  const snapImg = document.getElementById('webcamSnapImg');
+  snapImg.src = canvas.toDataURL('image/jpeg');
+
+  document.getElementById('webcamLoading').style.display = 'block';
+  document.getElementById('webcamResultArea').style.display = 'none';
+
+  canvas.toBlob(async (blob) => {
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    try {
+      const res = await fetch('/detect/webcam', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ image: dataUrl })
+      });
+      const data = await res.json();
+      document.getElementById('webcamLoading').style.display = 'none';
+      if (data.success) {
+        const r = data.result;
+        const card = document.getElementById('webcamResultCard');
+        card.className = 'result-card ' + (r.is_fake ? 'fake' : 'real');
+        document.getElementById('webcamIcon').textContent = r.is_fake ? '⚠️' : '✅';
+        document.getElementById('webcamVerdict').textContent = r.is_fake ? 'Deepfake Detected' : 'Real Image';
+        document.getElementById('webcamConf').textContent = r.confidence + '%';
+        setTimeout(() => {
+          document.getElementById('webcamRealBar').style.width = r.real_score + '%';
+          document.getElementById('webcamFakeBar').style.width = r.fake_score + '%';
+          document.getElementById('webcamRealPct').textContent = r.real_score + '%';
+          document.getElementById('webcamFakePct').textContent = r.fake_score + '%';
+        }, 100);
+        document.getElementById('webcamResultArea').style.display = 'block';
+      } else {
+        showNotif('Error: ' + data.error, 'error');
+      }
+    } catch(e) {
+      document.getElementById('webcamLoading').style.display = 'none';
+      showNotif('Connection error', 'error');
+    }
+  }, 'image/jpeg');
+}
+
+// ════════════════════════════════════
+// TAB 4: HEATMAP
+// ════════════════════════════════════
+let heatmapFile = null;
+
+const heatmapDrop = document.getElementById('heatmapDrop');
+heatmapDrop.addEventListener('dragover', e => { e.preventDefault(); heatmapDrop.classList.add('drag-over'); });
+heatmapDrop.addEventListener('dragleave', () => heatmapDrop.classList.remove('drag-over'));
+heatmapDrop.addEventListener('drop', e => { e.preventDefault(); heatmapDrop.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f && f.type.startsWith('image/')) setHeatmapFile(f); });
+heatmapDrop.addEventListener('click', e => { if (e.target.tagName !== 'BUTTON') document.getElementById('heatmapFile').click(); });
+document.getElementById('heatmapFile').addEventListener('change', e => { if (e.target.files[0]) setHeatmapFile(e.target.files[0]); });
+
+function setHeatmapFile(file) {
+  heatmapFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('heatmapPreviewImg').src = e.target.result;
+    document.getElementById('heatmapOrigImg').src = e.target.result;
+    document.getElementById('heatmapPreview').style.display = 'block';
+    document.getElementById('heatmapBtn').classList.add('show');
+    document.getElementById('heatmapTabResult').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+  document.getElementById('heatmapInfoName').textContent = file.name.length > 22 ? file.name.slice(0,22)+'…' : file.name;
+  document.getElementById('heatmapInfoSize').textContent = (file.size/1024).toFixed(1)+' KB';
+}
+
+async function generateHeatmap() {
+  if (!heatmapFile) return;
+  const btn = document.getElementById('heatmapBtn');
+  btn.disabled = true;
+  document.getElementById('heatmapLoading').style.display = 'block';
+  document.getElementById('heatmapTabResult').style.display = 'none';
+
+  const fd = new FormData();
+  fd.append('image', heatmapFile);
+  try {
+    const res = await fetch('/heatmap', { method:'POST', body:fd });
+    const data = await res.json();
+    document.getElementById('heatmapLoading').style.display = 'none';
+    if (data.success) {
+      const r = data.result;
+      const isReal = !r.is_fake;
+      const box = document.getElementById('heatmapResultBox');
+      box.style.cssText = isReal
+        ? 'background:rgba(0,245,196,0.08);border:1px solid rgba(0,245,196,0.3);'
+        : 'background:rgba(255,61,107,0.08);border:1px solid rgba(255,61,107,0.3);';
+      box.innerHTML = `
+        <span style="font-size:20px;">${isReal ? '✅' : '⚠️'}</span>
+        <span style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:${isReal ? 'var(--accent)' : 'var(--danger)'}; margin-left:10px;">${isReal ? 'Real Image' : 'Deepfake Detected'}</span>
+        <span style="font-size:12px;color:var(--muted);margin-left:14px;">Confidence: ${r.confidence}%</span>
+      `;
+      if (data.heatmap_url) {
+        document.getElementById('heatmapOverlayImg').src = data.heatmap_url + '?t=' + Date.now();
+      }
+      document.getElementById('heatmapTabResult').style.display = 'block';
+      showNotif('Heatmap generated!');
+    } else {
+      showNotif('Error: ' + (data.error || 'Unknown'), 'error');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    document.getElementById('heatmapLoading').style.display = 'none';
+    showNotif('Connection error', 'error');
+    btn.disabled = false;
+  }
+}
+
+function resetHeatmap() {
+  heatmapFile = null;
+  document.getElementById('heatmapPreview').style.display = 'none';
+  document.getElementById('heatmapBtn').classList.remove('show');
+  document.getElementById('heatmapBtn').disabled = false;
+  document.getElementById('heatmapLoading').style.display = 'none';
+  document.getElementById('heatmapTabResult').style.display = 'none';
+  document.getElementById('heatmapFile').value = '';
+}
+</script>
+
+</body>
+</html>
