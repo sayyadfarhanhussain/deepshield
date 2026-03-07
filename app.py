@@ -72,6 +72,20 @@ class DeepfakeDetector(nn.Module):
 print("Loading model...")
 device = torch.device('cpu')
 model = DeepfakeDetector().to(device)
+
+# ── Load trained weights if available ──
+MODEL_WEIGHTS = 'deepfake_model.pth'
+if os.path.exists(MODEL_WEIGHTS):
+    try:
+        model.load_state_dict(torch.load(MODEL_WEIGHTS, map_location=device))
+        print(f"✅ Trained weights loaded from '{MODEL_WEIGHTS}'")
+    except Exception as e:
+        print(f"⚠️  Could not load weights: {e}")
+        print("   Using default ImageNet weights (results may be inaccurate)")
+else:
+    print("⚠️  'deepfake_model.pth' not found — using ImageNet weights")
+    print("   Run train.py first for accurate results!")
+
 model.eval()
 print("Model ready!")
 
@@ -125,8 +139,9 @@ def analyze(path):
     t   = transform(img).unsqueeze(0).to(device)
     with torch.no_grad():
         p = torch.softmax(model(t), dim=1)[0]
-    r = round(p[0].item() * 100, 2)
-    f = round(p[1].item() * 100, 2)
+    # Dataset mein fake=0, real=1 hai
+    f = round(p[0].item() * 100, 2)   # index 0 = fake
+    r = round(p[1].item() * 100, 2)   # index 1 = real
     is_fake = f > r
     return {
         'label':      'Deepfake Detected' if is_fake else 'Real Image',
