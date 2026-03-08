@@ -147,10 +147,13 @@ def analyze(path):
     t   = transform(img).unsqueeze(0).to(device)
     with torch.no_grad():
         p = torch.softmax(m(t), dim=1)[0]
-    # Dataset mein fake=0, real=1 hai
-    f = round(p[0].item() * 100, 2)   # index 0 = fake
-    r = round(p[1].item() * 100, 2)   # index 1 = real
-    is_fake = f > r
+    # Dataset: fake=0, real=1
+    # p[0] = fake probability, p[1] = real probability
+    fake_score = round(p[0].item() * 100, 2)
+    real_score = round(p[1].item() * 100, 2)
+    is_fake = fake_score > real_score
+    f = fake_score
+    r = real_score
     return {
         'label':      'Deepfake Detected' if is_fake else 'Real Image',
         'confidence': round(f if is_fake else r, 2),
