@@ -64,7 +64,10 @@ class DeepfakeDetector(nn.Module):
             weights=models.EfficientNet_B0_Weights.DEFAULT
         )
         n = self.model.classifier[1].in_features
-        self.model.classifier[1] = nn.Linear(n, 2)
+        self.model.classifier[1] = nn.Sequential(
+            nn.Dropout(0.4),
+            nn.Linear(n, 2)
+        )
 
     def forward(self, x):
         return self.model(x)
