@@ -72,25 +72,29 @@ class DeepfakeDetector(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-print("Loading model...")
+# ── Lazy model loading — load on first request to save memory ──
 device = torch.device('cpu')
-model = DeepfakeDetector().to(device)
+model = None
 
-# ── Load trained weights if available ──
-MODEL_WEIGHTS = 'deepfake_model.pth'
-if os.path.exists(MODEL_WEIGHTS):
-    try:
-        model.load_state_dict(torch.load(MODEL_WEIGHTS, map_location=device))
-        print(f"✅ Trained weights loaded from '{MODEL_WEIGHTS}'")
-    except Exception as e:
-        print(f"⚠️  Could not load weights: {e}")
-        print("   Using default ImageNet weights (results may be inaccurate)")
-else:
-    print("⚠️  'deepfake_model.pth' not found — using ImageNet weights")
-    print("   Run train.py first for accurate results!")
-
-model.eval()
-print("Model ready!")
+def get_model():
+    global model
+    if model is not None:
+        return model
+    print("Loading model...")
+    m = DeepfakeDetector().to(device)
+    MODEL_WEIGHTS = 'deepfake_model.pth'
+    if os.path.exists(MODEL_WEIGHTS):
+        try:
+            m.load_state_dict(torch.load(MODEL_WEIGHTS, map_location=device))
+            print("✅ Trained weights loaded!")
+        except Exception as e:
+            print(f"⚠️  Could not load weights: {e}")
+    else:
+        print("⚠️  Using ImageNet weights")
+    m.eval()
+    model = m
+    print("Model ready!")
+    return model
 
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -127,7 +131,7 @@ class GradCAM:
         cam = (cam - cam.min()) / (cam.max() - cam.min() + 1e-8)
         return cam
 
-gradcam = GradCAM(model)
+# GradCAM initialized lazily with model
 
 # ─────────────────────────────────────────────
 # HELPERS
@@ -138,10 +142,11 @@ def allowed_image(filename):
 
 def analyze(path):
     """Core detection — returns dict with scores."""
+    m   = get_model()
     img = Image.open(path).convert('RGB')
     t   = transform(img).unsqueeze(0).to(device)
     with torch.no_grad():
-        p = torch.softmax(model(t), dim=1)[0]
+        p = torch.softmax(m(t), dim=1)[0]
     # Dataset mein fake=0, real=1 hai
     f = round(p[0].item() * 100, 2)   # index 0 = fake
     r = round(p[1].item() * 100, 2)   # index 1 = real
@@ -158,16 +163,18 @@ def make_heatmap(path, prefix):
     """Generate GradCAM heatmap overlay. Requires opencv."""
     if not CV2_OK:
         return None, None
+    m   = get_model()
+    gc  = GradCAM(m)
     img = Image.open(path).convert('RGB')
     sz  = img.size
     t2  = transform(img).unsqueeze(0).to(device)
     t2.requires_grad_(True)
     with torch.no_grad():
-        p = torch.softmax(model(t2), dim=1)[0]
+        p = torch.softmax(m(t2), dim=1)[0]
     cls = 1 if p[1] > p[0] else 0
     t3  = transform(img).unsqueeze(0).to(device)
     t3.requires_grad_(True)
-    cam = gradcam.generate(t3, cls)
+    cam = gc.generate(t3, cls)
     cam = cv2.resize(cam, sz)
     hm  = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
     hm  = cv2.cvtColor(hm, cv2.COLOR_BGR2RGB)
