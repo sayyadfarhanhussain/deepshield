@@ -1,11 +1,10 @@
-# DeepShield Advanced — Required Libraries
-# Install with: pip install -r requirements.txt
-
-flask>=3.0.0           # Web server
-torch>=2.0.0           # Deep learning (PyTorch)
-torchvision>=0.15.0    # EfficientNet model
-Pillow>=10.0.0         # Image processing
-numpy>=1.24.0          # Array ops (GradCAM)
-opencv-python>=4.8.0   # Heatmap overlay + webcam
-reportlab>=4.0.0       # PDF report generation
-werkzeug>=3.0.0        # Secure file upload
+# DeepShield Advanced - Required Libraries
+flask>=3.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+Pillow>=10.0.0
+numpy>=1.24.0
+opencv-python-headless>=4.8.0
+reportlab>=4.0.0
+werkzeug>=3.0.0
+gunicorn>=21.2.0
